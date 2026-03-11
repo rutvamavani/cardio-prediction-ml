@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CardioScan — AI Heart Risk Predictor</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Inter:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <style>
+    /* ============================================================
+       ROOT & RESET
+    ============================================================ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #040810;
+      --surface:  #0a1120;
+      --card:     rgba(10, 20, 40, 0.75);
+      --border:   rgba(255,255,255,0.07);
+      --border2:  rgba(255,255,255,0.12);
+      --red:      #ff3b5c;
+      --red-dim:  rgba(255,59,92,0.18);
+      --red-glow: rgba(255,59,92,0.35);
+      --cyan:     #00e5ff;
+      --cyan-dim: rgba(0,229,255,0.12);
+      --text:     #e8edf5;
+      --muted:    #5a6a84;
+      --accent:   #1a2a4a;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ============================================================
+       ANIMATED BACKGROUND
+    ============================================================ */
+    .bg-grid {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image:
+        linear-gradient(rgba(0,229,255,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,229,255,0.025) 1px, transparent 1px);
+      background-size: 60px 60px;
+      mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 30%, transparent 100%);
+    }
+
+    .bg-orbs {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+    }
+    .orb {
+      position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.35;
+      animation: drift 12s ease-in-out infinite alternate;
+    }
+    .orb1 { width:500px; height:500px; background:#1a0a2e; top:-150px; left:-100px; animation-duration:14s; }
+    .orb2 { width:400px; height:400px; background:#0a1a3e; top:20%; right:-120px; animation-duration:11s; animation-delay:-5s; }
+    .orb3 { width:350px; height:350px; background:#1a0510; bottom:10%; left:20%; animation-duration:16s; animation-delay:-3s; }
+
+    @keyframes drift {
+      from { transform: translate(0,0) scale(1); }
+      to   { transform: translate(30px, 40px) scale(1.08); }
+    }
+
+    /* ============================================================
+       ECG HERO CANVAS
+    ============================================================ */
+    .ecg-hero {
+      position: relative; z-index: 1;
+      width: 100%; height: 90px; overflow: hidden;
+      margin-bottom: -2px;
+    }
+    .ecg-hero svg { width: 200%; height: 100%; animation: ecg-scroll 4s linear infinite; }
+    @keyframes ecg-scroll {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-50%); }
+    }
+
+    /* ============================================================
+       LAYOUT
+    ============================================================ */
+    .page-wrap {
+      position: relative; z-index: 1;
+      max-width: 860px; margin: 0 auto;
+      padding: 0 24px 80px;
+    }
+
+    /* ============================================================
+       NAVBAR
+    ============================================================ */
+    nav {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 28px 0 0;
+    }
+    .nav-logo {
+      display: flex; align-items: center; gap: 10px;
+      font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800;
+      letter-spacing: -0.5px;
+    }
+    .logo-dot { color: var(--red); }
+    .nav-pill {
+      font-size: 11px; font-weight: 500; letter-spacing: 1.5px;
+      text-transform: uppercase; color: var(--cyan);
+      border: 1px solid rgba(0,229,255,0.25);
+      padding: 6px 14px; border-radius: 100px;
+      background: rgba(0,229,255,0.05);
+    }
+
+    /* ============================================================
+       HERO
+    ============================================================ */
+    .hero {
+      text-align: center;
+      padding: 60px 0 54px;
+    }
+    .hero-eyebrow {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 11px; letter-spacing: 2px; text-transform: uppercase;
+      color: var(--red); font-weight: 600; margin-bottom: 22px;
+    }
+    .eyebrow-line { width: 32px; height: 1px; background: var(--red); }
+
+    .hero h1 {
+      font-family: 'Syne', sans-serif;
+      font-size: clamp(38px, 6vw, 68px);
+      font-weight: 800;
+      line-height: 1.05;
+      letter-spacing: -2px;
+      margin-bottom: 22px;
+    }
+    .hero h1 .accent { color: var(--red); }
+    .hero h1 .dim { color: var(--muted); }
+
+    .hero-sub {
+      font-size: 15px; color: var(--muted); max-width: 500px;
+      margin: 0 auto 36px; line-height: 1.75; font-weight: 300;
+    }
+
+    .stat-strip {
+      display: inline-flex; gap: 0;
+      border: 1px solid var(--border2);
+      border-radius: 14px; overflow: hidden;
+      background: var(--card);
+      backdrop-filter: blur(12px);
+    }
+    .stat-strip-item {
+      padding: 14px 28px;
+      border-right: 1px solid var(--border);
+      text-align: center;
+    }
+    .stat-strip-item:last-child { border-right: none; }
+    .ss-val {
+      display: block;
+      font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 700;
+      color: var(--cyan);
+    }
+    .ss-lbl {
+      display: block; font-size: 10px; letter-spacing: 1.2px;
+      text-transform: uppercase; color: var(--muted); margin-top: 2px;
+    }
+
+    /* ============================================================
+       MULTI-STEP FORM
+    ============================================================ */
+    .form-shell {
+      background: var(--card);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border2);
+      border-radius: 24px;
+      overflow: hidden;
+      box-shadow: 0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px var(--border);
+    }
+
+    /* Step progress bar */
+    .step-progress {
+      display: flex;
+      background: rgba(0,0,0,0.4);
+      border-bottom: 1px solid var(--border);
+    }
+    .step-tab {
+      flex: 1; padding: 18px 12px;
+      text-align: center; position: relative;
+      cursor: pointer; transition: background 0.3s;
+    }
+    .step-tab.active { background: rgba(0,229,255,0.05); }
+    .step-tab.done   { background: rgba(0,229,255,0.03); }
+
+    .step-num {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 26px; height: 26px; border-radius: 50%;
+      font-size: 11px; font-weight: 700; margin-bottom: 5px;
+      border: 1.5px solid var(--muted); color: var(--muted);
+      transition: all 0.3s;
+    }
+    .step-tab.active .step-num {
+      border-color: var(--cyan); color: var(--cyan);
+      box-shadow: 0 0 12px rgba(0,229,255,0.4);
+    }
+    .step-tab.done .step-num {
+      border-color: var(--cyan); background: var(--cyan); color: var(--bg);
+    }
+    .step-lbl {
+      display: block; font-size: 10px; letter-spacing: 1px;
+      text-transform: uppercase; color: var(--muted);
+      transition: color 0.3s;
+    }
+    .step-tab.active .step-lbl { color: var(--cyan); }
+
+    .progress-line {
+      height: 2px; background: var(--border);
+      position: relative; overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%; background: linear-gradient(90deg, var(--cyan), var(--red));
+      transition: width 0.5s cubic-bezier(0.4,0,0.2,1);
+    }
+
+    /* Form panels */
+    .form-body { padding: 48px 48px 40px; }
+
+    .form-panel { display: none; }
+    .form-panel.active { display: block; animation: fadeUp 0.4s ease both; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(18px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .panel-title {
+      font-family: 'Syne', sans-serif; font-size: 26px; font-weight: 700;
+      letter-spacing: -0.5px; margin-bottom: 6px;
+    }
+    .panel-sub {
+      font-size: 13px; color: var(--muted); margin-bottom: 36px; font-weight: 300;
+    }
+
+    /* Input grid */
+    .input-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+    }
+    .input-grid.cols-1 { grid-template-columns: 1fr; }
+
+    .field {
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .field label {
+      font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase;
+      color: var(--muted); font-weight: 600;
+    }
+    .field label span { color: var(--cyan); margin-left: 4px; font-size: 10px; }
+
+    .field input, .field select {
+      width: 100%;
+      background: rgba(255,255,255,0.04);
+      border: 1.5px solid var(--border2);
+      border-radius: 12px;
+      padding: 14px 18px;
+      font-family: 'Inter', sans-serif; font-size: 15px;
+      color: var(--text); outline: none;
+      transition: all 0.25s;
+      appearance: none; -webkit-appearance: none;
+    }
+    .field input::placeholder { color: var(--muted); }
+    .field input:focus, .field select:focus {
+      border-color: var(--cyan);
+      background: rgba(0,229,255,0.05);
+      box-shadow: 0 0 0 3px rgba(0,229,255,0.1), 0 0 20px rgba(0,229,255,0.08);
+    }
+    .field select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%235a6a84' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 18px center;
+      padding-right: 44px; cursor: pointer;
+    }
+    .field select option { background: #0d1b2e; }
+
+    .field-hint {
+      font-size: 11px; color: var(--muted); font-weight: 400;
+    }
+
+    /* Toggle cards for lifestyle */
+    .toggle-cards { display: flex; flex-direction: column; gap: 14px; }
+
+    .toggle-card {
+      display: flex; align-items: center; justify-content: space-between;
+      background: rgba(255,255,255,0.03);
+      border: 1.5px solid var(--border2);
+      border-radius: 14px; padding: 18px 22px;
+      transition: all 0.25s;
+    }
+    .toggle-card:hover { border-color: rgba(0,229,255,0.3); }
+
+    .tc-label {
+      display: flex; align-items: center; gap: 14px;
+    }
+    .tc-icon {
+      width: 40px; height: 40px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
+    }
+    .tc-text strong {
+      display: block; font-size: 14px; font-weight: 500; color: var(--text);
+    }
+    .tc-text small {
+      font-size: 11px; color: var(--muted);
+    }
+
+    .radio-toggle {
+      display: flex; background: rgba(0,0,0,0.4);
+      border: 1px solid var(--border2); border-radius: 100px;
+      padding: 3px; gap: 2px;
+    }
+    .radio-toggle label {
+      padding: 6px 18px; border-radius: 100px;
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      color: var(--muted); transition: all 0.2s; white-space: nowrap;
+    }
+    .radio-toggle input { display: none; }
+    .radio-toggle input:checked + label {
+      background: var(--cyan);
+      color: var(--bg);
+      box-shadow: 0 0 12px rgba(0,229,255,0.4);
+    }
+
+    /* Nav buttons */
+    .form-nav {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-top: 40px; padding-top: 28px;
+      border-top: 1px solid var(--border);
+    }
+    .btn-back {
+      background: transparent;
+      border: 1.5px solid var(--border2);
+      color: var(--muted);
+      padding: 13px 28px; border-radius: 12px;
+      font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .btn-back:hover { border-color: var(--border2); color: var(--text); }
+
+    .btn-next {
+      background: linear-gradient(135deg, #00e5ff 0%, #0099cc 100%);
+      border: none; color: var(--bg);
+      padding: 14px 36px; border-radius: 12px;
+      font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700;
+      cursor: pointer; transition: all 0.25s;
+      box-shadow: 0 4px 20px rgba(0,229,255,0.3);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .btn-next:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px rgba(0,229,255,0.45);
+    }
+    .btn-next:active { transform: translateY(0); }
+
+    .btn-submit {
+      background: linear-gradient(135deg, #ff3b5c 0%, #cc1a35 100%);
+      border: none; color: #fff;
+      padding: 14px 36px; border-radius: 12px;
+      font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700;
+      cursor: pointer; transition: all 0.25s;
+      box-shadow: 0 4px 20px rgba(255,59,92,0.4);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .btn-submit:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px rgba(255,59,92,0.55);
+    }
+
+    .btn-arrow { font-size: 18px; }
+
+    /* Step indicator dots */
+    .step-dots {
+      display: flex; gap: 6px; align-items: center;
+    }
+    .dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--border2); transition: all 0.3s;
+    }
+    .dot.active { background: var(--cyan); width: 20px; border-radius: 4px; }
+
+    /* ============================================================
+       DISCLAIMER + FOOTER
+    ============================================================ */
+    .disclaimer {
+      display: flex; align-items: flex-start; gap: 12px;
+      margin-top: 24px;
+      background: rgba(255,200,0,0.06);
+      border: 1px solid rgba(255,200,0,0.2);
+      border-radius: 14px; padding: 16px 20px;
+      font-size: 12px; color: rgba(255,220,0,0.7); line-height: 1.7;
+    }
+    .disclaimer strong { color: rgba(255,220,0,0.9); }
+
+    footer {
+      text-align: center; padding: 40px 0 0;
+      font-size: 12px; color: var(--muted); letter-spacing: 0.5px;
+    }
+
+  </style>
+</head>
+<body>
+
+  <div class="bg-grid"></div>
+  <div class="bg-orbs">
+    <div class="orb orb1"></div>
+    <div class="orb orb2"></div>
+    <div class="orb orb3"></div>
+  </div>
+
+  <!-- Animated ECG strip -->
+  <div class="ecg-hero">
+    <svg viewBox="0 0 1400 90" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+      <polyline
+        points="0,45 60,45 90,45 105,8 115,82 125,45 155,45 170,30 185,60 200,45 260,45 310,45 325,8 335,82 345,45 375,45 390,30 405,60 420,45 480,45 530,45 545,8 555,82 565,45 595,45 610,30 625,60 640,45 700,45 750,45 765,8 775,82 785,45 815,45 830,30 845,60 860,45 920,45 970,45 985,8 995,82 1005,45 1035,45 1050,30 1065,60 1080,45 1140,45 1190,45 1205,8 1215,82 1225,45 1255,45 1270,30 1285,60 1300,45 1400,45"
+        fill="none"
+        stroke="rgba(255,59,92,0.5)"
+        stroke-width="1.5"
+        stroke-linecap="round"
+      />
+      <!-- duplicate for seamless scroll -->
+      <polyline
+        points="1400,45 1460,45 1490,45 1505,8 1515,82 1525,45 1555,45 1570,30 1585,60 1600,45 1660,45 1710,45 1725,8 1735,82 1745,45 1775,45 1790,30 1805,60 1820,45 1880,45 1930,45 1945,8 1955,82 1965,45 1995,45 2010,30 2025,60 2040,45 2100,45 2150,45 2165,8 2175,82 2185,45 2215,45 2230,30 2245,60 2260,45 2320,45 2370,45 2385,8 2395,82 2405,45 2435,45 2450,30 2465,60 2480,45 2540,45 2590,45 2605,8 2615,82 2625,45 2655,45 2670,30 2685,60 2700,45 2800,45"
+        fill="none"
+        stroke="rgba(255,59,92,0.5)"
+        stroke-width="1.5"
+        stroke-linecap="round"
+      />
+    </svg>
+  </div>
+
+  <div class="page-wrap">
+    <!-- Nav -->
+    <nav>
+      <div class="nav-logo">
+        Cardio<span class="logo-dot">Scan</span>
+      </div>
+      <div class="nav-pill">AI Heart Risk Analysis</div>
+    </nav>
+
+    <!-- Hero -->
+    <section class="hero">
+      <div class="hero-eyebrow">
+        <span class="eyebrow-line"></span>
+        Machine Learning Powered
+        <span class="eyebrow-line"></span>
+      </div>
+      <h1>
+        Predict Your<br>
+        <span class="accent">Heart Disease</span><br>
+        <span class="dim">Risk Instantly</span>
+      </h1>
+      <p class="hero-sub">
+        Enter 11 clinical parameters. Our tuned ML model — trained on 70,000 real patients — returns your cardiovascular risk profile in seconds.
+      </p>
+      <div class="stat-strip">
+        <div class="stat-strip-item">
+          <span class="ss-val">73.9%</span>
+          <span class="ss-lbl">Accuracy</span>
+        </div>
+        <div class="stat-strip-item">
+          <span class="ss-val">70K</span>
+          <span class="ss-lbl">Patients</span>
+        </div>
+        <div class="stat-strip-item">
+          <span class="ss-val">71.8%</span>
+          <span class="ss-lbl">F1-Score</span>
+        </div>
+        <div class="stat-strip-item">
+          <span class="ss-val">RF</span>
+          <span class="ss-lbl">Model</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Multi-step Form -->
+    <form action="/predict" method="POST" id="mainForm">
+      <div class="form-shell">
+
+        <!-- Step Tabs -->
+        <div class="step-progress">
+          <div class="step-tab active" id="tab1">
+            <div class="step-num">1</div>
+            <span class="step-lbl">Personal</span>
+          </div>
+          <div class="step-tab" id="tab2">
+            <div class="step-num">2</div>
+            <span class="step-lbl">Clinical</span>
+          </div>
+          <div class="step-tab" id="tab3">
+            <div class="step-num">3</div>
+            <span class="step-lbl">Lifestyle</span>
+          </div>
+        </div>
+        <div class="progress-line">
+          <div class="progress-fill" id="progressFill" style="width:33%"></div>
+        </div>
+
+        <div class="form-body">
+
+          <!-- PANEL 1: Personal -->
+          <div class="form-panel active" id="panel1">
+            <div class="panel-title">Personal Details</div>
+            <p class="panel-sub">Basic physical information to calibrate the model.</p>
+            <div class="input-grid">
+              <div class="field">
+                <label>Age <span>(years)</span></label>
+                <input type="number" name="age" min="1" max="100" placeholder="e.g. 45" required/>
+              </div>
+              <div class="field">
+                <label>Gender</label>
+                <select name="gender" required>
+                  <option value="" disabled selected>Select gender</option>
+                  <option value="1">Female</option>
+                  <option value="2">Male</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Height <span>(cm)</span></label>
+                <input type="number" name="height" min="100" max="250" placeholder="e.g. 170" required/>
+              </div>
+              <div class="field">
+                <label>Weight <span>(kg)</span></label>
+                <input type="number" name="weight" min="20" max="300" step="0.1" placeholder="e.g. 70" required/>
+              </div>
+            </div>
+            <div class="form-nav">
+              <div class="step-dots">
+                <div class="dot active"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+              </div>
+              <button type="button" class="btn-next" onclick="goStep(2)">
+                Next <span class="btn-arrow">→</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- PANEL 2: Clinical -->
+          <div class="form-panel" id="panel2">
+            <div class="panel-title">Clinical Measurements</div>
+            <p class="panel-sub">Blood pressure and laboratory test values.</p>
+            <div class="input-grid">
+              <div class="field">
+                <label>Systolic BP <span>(mmHg)</span></label>
+                <input type="number" name="ap_hi" min="60" max="300" placeholder="e.g. 120" required/>
+                <div class="field-hint">Upper blood pressure reading</div>
+              </div>
+              <div class="field">
+                <label>Diastolic BP <span>(mmHg)</span></label>
+                <input type="number" name="ap_lo" min="40" max="200" placeholder="e.g. 80" required/>
+                <div class="field-hint">Lower blood pressure reading</div>
+              </div>
+              <div class="field">
+                <label>Cholesterol Level</label>
+                <select name="cholesterol" required>
+                  <option value="" disabled selected>Select level</option>
+                  <option value="1">Normal</option>
+                  <option value="2">Above Normal</option>
+                  <option value="3">Well Above Normal</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Glucose Level</label>
+                <select name="gluc" required>
+                  <option value="" disabled selected>Select level</option>
+                  <option value="1">Normal</option>
+                  <option value="2">Above Normal</option>
+                  <option value="3">Well Above Normal</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-nav">
+              <div class="step-dots">
+                <div class="dot"></div>
+                <div class="dot active"></div>
+                <div class="dot"></div>
+              </div>
+              <div style="display:flex;gap:12px;">
+                <button type="button" class="btn-back" onclick="goStep(1)">← Back</button>
+                <button type="button" class="btn-next" onclick="goStep(3)">
+                  Next <span class="btn-arrow">→</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- PANEL 3: Lifestyle -->
+          <div class="form-panel" id="panel3">
+            <div class="panel-title">Lifestyle Habits</div>
+            <p class="panel-sub">Daily habits that significantly impact cardiovascular risk.</p>
+            <div class="toggle-cards">
+
+              <div class="toggle-card">
+                <div class="tc-label">
+                  <div class="tc-icon">🚬</div>
+                  <div class="tc-text">
+                    <strong>Smoking</strong>
+                    <small>Current tobacco use</small>
+                  </div>
+                </div>
+                <div class="radio-toggle">
+                  <input type="radio" name="smoke" value="0" id="smoke0" checked/>
+                  <label for="smoke0">No</label>
+                  <input type="radio" name="smoke" value="1" id="smoke1"/>
+                  <label for="smoke1">Yes</label>
+                </div>
+              </div>
+
+              <div class="toggle-card">
+                <div class="tc-label">
+                  <div class="tc-icon">🍺</div>
+                  <div class="tc-text">
+                    <strong>Alcohol Consumption</strong>
+                    <small>Regular alcohol intake</small>
+                  </div>
+                </div>
+                <div class="radio-toggle">
+                  <input type="radio" name="alco" value="0" id="alco0" checked/>
+                  <label for="alco0">No</label>
+                  <input type="radio" name="alco" value="1" id="alco1"/>
+                  <label for="alco1">Yes</label>
+                </div>
+              </div>
+
+              <div class="toggle-card">
+                <div class="tc-label">
+                  <div class="tc-icon">🏃</div>
+                  <div class="tc-text">
+                    <strong>Physical Activity</strong>
+                    <small>Regular exercise / active lifestyle</small>
+                  </div>
+                </div>
+                <div class="radio-toggle">
+                  <input type="radio" name="active" value="0" id="active0"/>
+                  <label for="active0">No</label>
+                  <input type="radio" name="active" value="1" id="active1" checked/>
+                  <label for="active1">Yes</label>
+                </div>
+              </div>
+
+            </div>
+            <div class="form-nav">
+              <div class="step-dots">
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot active"></div>
+              </div>
+              <div style="display:flex;gap:12px;">
+                <button type="button" class="btn-back" onclick="goStep(2)">← Back</button>
+                <button type="submit" class="btn-submit">
+                  🫀 Analyze Risk
+                </button>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /form-body -->
+      </div><!-- /form-shell -->
+    </form>
+
+    <div class="disclaimer">
+      <span>⚠️</span>
+      <p><strong>Medical Disclaimer:</strong> This tool is for educational and demonstration purposes only. It is not a substitute for professional medical advice, diagnosis, or treatment. Always consult a qualified healthcare provider.</p>
+    </div>
+
+    <footer>
+      CardioScan &copy; 2025 &nbsp;·&nbsp; Built with Python, Flask & Random Forest &nbsp;·&nbsp; 73.9% Accuracy
+    </footer>
+  </div>
+
+  <script>
+    const panels   = [1,2,3];
+    let currentStep = 1;
+
+    function goStep(step) {
+      // Validate current panel before advancing
+      if (step > currentStep) {
+        const panel = document.getElementById('panel' + currentStep);
+        const inputs = panel.querySelectorAll('input[required], select[required]');
+        for (let inp of inputs) {
+          if (!inp.value) {
+            inp.focus();
+            inp.style.borderColor = 'var(--red)';
+            inp.style.boxShadow = '0 0 0 3px rgba(255,59,92,0.2)';
+            setTimeout(() => {
+              inp.style.borderColor = '';
+              inp.style.boxShadow = '';
+            }, 1500);
+            return;
+          }
+        }
+      }
+
+      // Switch panel
+      document.getElementById('panel' + currentStep).classList.remove('active');
+      document.getElementById('tab'   + currentStep).classList.remove('active');
+      document.getElementById('tab'   + currentStep).classList.add(step > currentStep ? 'done' : '');
+
+      currentStep = step;
+
+      document.getElementById('panel' + currentStep).classList.add('active');
+      document.getElementById('tab'   + currentStep).classList.add('active');
+      document.getElementById('tab'   + currentStep).classList.remove('done');
+
+      // Progress fill
+      const pct = { 1:33, 2:66, 3:100 }[step];
+      document.getElementById('progressFill').style.width = pct + '%';
+    }
+
+    // Animate hero stats on load
+    document.addEventListener('DOMContentLoaded', () => {
+      const items = document.querySelectorAll('.stat-strip-item, .hero-eyebrow, .hero h1, .hero-sub, .form-shell');
+      items.forEach((el, i) => {
+        el.style.opacity = 0;
+        el.style.transform = 'translateY(20px)';
+        setTimeout(() => {
+          el.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+          el.style.opacity = 1;
+          el.style.transform = 'translateY(0)';
+        }, 80 * i);
+      });
+    });
+  </script>
+</body>
+</html>
