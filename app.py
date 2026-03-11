@@ -5,7 +5,8 @@ from flask import Flask, render_template, request
 import pickle
 import numpy as np
 
-app = Flask(__name__)
+##app = Flask(__name__)
+app = Flask(__name__, template_folder="templates")
 
 model  = pickle.load(open('cardio_model.pkl', 'rb'))
 scaler = pickle.load(open('scaler.pkl', 'rb'))
