@@ -1,3 +1,6 @@
+import os
+import socket
+
 from flask import Flask, render_template, request
 import pickle
 import numpy as np
@@ -61,5 +64,23 @@ def predict():
                                safe_percent=0,
                                error=str(e))
 
+def _find_free_port(start: int = 5000, end: int = 5010) -> int:
+    """Return the first free port in the given range.
+
+    This is used to avoid port conflicts (e.g., macOS AirPlay Receiver reserves 5000).
+    """
+    for port in range(start, end + 1):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                sock.bind(('127.0.0.1', port))
+                return port
+            except OSError:
+                continue
+    raise RuntimeError(f"No free ports available in range {start}-{end}")
+
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get('PORT') or os.environ.get('FLASK_RUN_PORT') or _find_free_port())
+    print(f"Starting Flask on http://127.0.0.1:{port} (use CTRL+C to stop)")
+    app.run(debug=True, port=port)
